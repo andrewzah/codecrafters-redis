@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+// logs at level
 func LogAtLevel(level, format string, a ...interface{}) {
 	msg := fmt.Sprintf("[%s] %s\n", level, format)
 	fmt.Fprintf(os.Stdout, msg, a...)
