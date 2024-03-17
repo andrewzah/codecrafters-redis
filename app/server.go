@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 )
@@ -31,16 +32,28 @@ func main() {
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-
+	pongResponse := []byte("+PONG\r\n")
 	buf := make([]byte, 512)
-	_, err := bufio.NewReader(conn).Read(buf)
 
-	if err != nil {
-		return
+	for {
+		Debugf("[%s]: %s", conn.RemoteAddr().String(), buf)
+
+		_, err := bufio.NewReader(conn).Read(buf)
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			Warningf("Error reading buffer: ", err.Error())
+			return
+		}
+
+		_, err = conn.Write(pongResponse)
+		if err != nil {
+			Warningf("Error writing to client: ", err.Error())
+			return
+		}
 	}
 
-	Debugf("Conn from [%s]", conn.RemoteAddr().String())
-
-	response := []byte("+PONG\r\n")
-	conn.Write(response)
 }
