@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -16,16 +17,20 @@ var (
 )
 
 func main() {
-	l, err := net.Listen("tcp", "0.0.0.0:6379")
+	port := flag.String("port", "6379", "port for server")
+	bindHost := flag.String("bind-host", "0.0.0.0", "host to bind on")
+	flag.Parse()
+
+	formattedHost := fmt.Sprintf("%s:%s", *bindHost, *port)
+	l, err := net.Listen("tcp", formattedHost)
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
-
-	memoryStore := MemoryStore{map[string]RedisValue{}, sync.RWMutex{}}
-
-	Debugf("Listening on 0.0.0.0:6379")
 	defer l.Close()
+
+	Infof("Listening on %s", formattedHost)
+	store := Store{map[string]RedisValue{}, sync.RWMutex{}}
 
 	for {
 		conn, err := l.Accept()
@@ -35,11 +40,11 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn, memoryStore)
+		go handleConnection(conn, store)
 	}
 }
 
-func handleConnection(conn net.Conn, memoryStore MemoryStore) {
+func handleConnection(conn net.Conn, store Store) {
 	defer conn.Close()
 	buf := make([]byte, 512)
 
@@ -62,9 +67,9 @@ func handleConnection(conn net.Conn, memoryStore MemoryStore) {
 		case "echo":
 			err = HandleEcho(redisCmd, conn)
 		case "set":
-			err = HandleSet(redisCmd, conn, memoryStore)
+			err = HandleSet(redisCmd, conn, store)
 		case "get":
-			err = HandleGet(redisCmd, conn, memoryStore)
+			err = HandleGet(redisCmd, conn, store)
 		default:
 			Errorf("Invalid redis command: [%s]", redisCmd.Name)
 			return
