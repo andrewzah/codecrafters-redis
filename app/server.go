@@ -9,16 +9,10 @@ import (
 	"sync"
 )
 
-type MemoryStore struct {
-	Data      map[string]string
-	DataMutex sync.RWMutex
-}
-
 var (
 	okResponse             = []byte("+OK\r\n")
 	pongResponse           = []byte("+PONG\r\n")
 	nullBulkStringResponse = []byte("$-1\r\n")
-	memoryStore            = MemoryStore{make(map[string]string), sync.RWMutex{}}
 )
 
 func main() {
@@ -27,6 +21,8 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+
+	memoryStore := MemoryStore{map[string]RedisValue{}, sync.RWMutex{}}
 
 	Debugf("Listening on 0.0.0.0:6379")
 	defer l.Close()
@@ -39,11 +35,11 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, memoryStore)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, memoryStore MemoryStore) {
 	defer conn.Close()
 	buf := make([]byte, 512)
 
@@ -66,16 +62,16 @@ func handleConnection(conn net.Conn) {
 		case "echo":
 			err = HandleEcho(redisCmd, conn)
 		case "set":
-			err = HandleSet(redisCmd, conn)
+			err = HandleSet(redisCmd, conn, memoryStore)
 		case "get":
-			err = HandleGet(redisCmd, conn)
+			err = HandleGet(redisCmd, conn, memoryStore)
 		default:
 			Errorf("Invalid redis command: [%s]", redisCmd.Name)
 			return
 		}
 
 		if err != nil {
-			Warningf("Error writing to client: ", err.Error())
+			Errorf("Error writing to client: ", err.Error())
 			return
 		}
 	}
