@@ -6,11 +6,19 @@ import (
 	"io"
 	"net"
 	"os"
-	"strings"
+	"sync"
 )
 
+type MemoryStore struct {
+	Data      map[string]string
+	DataMutex sync.RWMutex
+}
+
 var (
-	pongResponse = []byte("+PONG\r\n")
+	okResponse             = []byte("+OK\r\n")
+	pongResponse           = []byte("+PONG\r\n")
+	nullBulkStringResponse = []byte("$-1\r\n")
+	memoryStore            = MemoryStore{make(map[string]string), sync.RWMutex{}}
 )
 
 func main() {
@@ -54,9 +62,13 @@ func handleConnection(conn net.Conn) {
 
 		switch redisCmd.Name {
 		case "ping":
-			err = handlePing(conn)
+			err = HandlePing(conn)
 		case "echo":
-			err = handleEcho(redisCmd, conn)
+			err = HandleEcho(redisCmd, conn)
+		case "set":
+			err = HandleSet(redisCmd, conn)
+		case "get":
+			err = HandleGet(redisCmd, conn)
 		default:
 			Errorf("Invalid redis command: [%s]", redisCmd.Name)
 			return
@@ -68,24 +80,4 @@ func handleConnection(conn net.Conn) {
 		}
 	}
 
-}
-
-func handleEcho(cmd RedisCmd, conn net.Conn) error {
-	response := encodeBulkString(strings.Join(cmd.Args, " "))
-
-	return writeResponse([]byte(response), conn)
-}
-
-func handlePing(conn net.Conn) error {
-	return writeResponse(pongResponse, conn)
-}
-
-func writeResponse(response []byte, conn net.Conn) error {
-	_, err := conn.Write(response)
-
-	if err != nil {
-		return err
-	} else {
-		return nil
-	}
 }
