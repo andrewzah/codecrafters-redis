@@ -66,6 +66,8 @@ func handleConnection(conn net.Conn, store Store) {
 			err = HandlePing(conn)
 		case "echo":
 			err = HandleEcho(redisCmd, conn)
+		case "info":
+			err = HandleInfo(redisCmd, conn)
 		case "set":
 			err = HandleSet(redisCmd, conn, store)
 		case "get":
@@ -76,9 +78,11 @@ func handleConnection(conn net.Conn, store Store) {
 		}
 
 		if err != nil {
-			Errorf("Error writing to client: ", err.Error())
-			return
+			Errorf(err.Error())
+			_, e := conn.Write([]byte(encodeErrorString(err.Error())))
+			if err != nil {
+				Fatalf("Error writing to client: %s", e.Error())
+			}
 		}
 	}
-
 }

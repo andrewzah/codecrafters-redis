@@ -48,6 +48,21 @@ func HandleGet(cmd RedisCmd, conn net.Conn, store Store) error {
 	return writeResponse(nullBulkStringResponse, conn)
 }
 
+func HandleInfo(cmd RedisCmd, conn net.Conn) error {
+	if len(cmd.Args) < 1 {
+		return errors.New("Expected subcommand for INFO command")
+	}
+	switch cmd.Args[0] {
+	case "replication":
+		response := encodeBulkString("role:master\nconnected_slaves:0")
+		return writeResponse([]byte(response), conn)
+
+	default:
+		return errors.New("Unsupported subcommand for INFO command")
+	}
+
+}
+
 func writeResponse(response []byte, conn net.Conn) error {
 	_, err := conn.Write(response)
 

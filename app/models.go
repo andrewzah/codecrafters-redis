@@ -50,3 +50,7 @@ func (s Store) GetData(key string) string {
 
 	return val.Data
 }
+
+type InfoReplication struct {
+	role string
+}
