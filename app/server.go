@@ -12,16 +12,10 @@ import (
 	"sync"
 )
 
-var (
-	okResponse             = []byte("+OK\r\n")
-	pongResponse           = []byte("+PONG\r\n")
-	nullBulkStringResponse = []byte("$-1\r\n")
-)
-
 type ServerArgs struct {
-	master   string
-	bindHost string
-	bindPort uint
+	masterUrl string
+	bindHost  string
+	bindPort  uint
 }
 
 func parseArgs() (a ServerArgs, e error) {
@@ -50,35 +44,28 @@ func parseArgs() (a ServerArgs, e error) {
 			return
 		}
 
-		a.master = fmt.Sprintf("%s:%d", *masterHost, masterPort)
+		a.masterUrl = fmt.Sprintf("%s:%d", *masterHost, masterPort)
 	}
 	return
 }
 
-func createContext(args ServerArgs) *AppContext {
+func initMetadata(args ServerArgs) *InstanceMetadata {
 	replID := ""
-	role := "slave"
+	role := NodeRole
 
-	if len(args.master) == 0 {
-		role = "master"
+	if len(args.masterUrl) == 0 {
+		role = MasterRole
 		replID = RandStringBytes(40)
 	}
 
-	metadata := AppMetadata{
+	metadata := InstanceMetadata{
 		role,
 		replID,
 		0,
 		0,
 	}
 
-	ctx := AppContext{
-		sync.RWMutex{},
-		map[string]RedisValue{},
-		sync.RWMutex{},
-		metadata,
-	}
-
-	return &ctx
+	return &metadata
 }
 
 func main() {
@@ -94,10 +81,14 @@ func main() {
 		os.Exit(1)
 	}
 	defer l.Close()
-
 	Infof("Listening on %s", bind)
 
-	ctx := createContext(args)
+	metadata := initMetadata(args)
+	store := Store{sync.RWMutex{}, map[string]RedisValue{}}
+
+	if metadata.Role == NodeRole {
+		go handlePingMaster(args.masterUrl)
+	}
 
 	for {
 		conn, err := l.Accept()
@@ -106,11 +97,11 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn, ctx)
+		go handleConnection(conn, &store, *metadata)
 	}
 }
 
-func handleConnection(conn net.Conn, ctx *AppContext) {
+func handleConnection(conn net.Conn, store *Store, metadata InstanceMetadata) {
 	defer conn.Close()
 	buf := make([]byte, 512)
 
@@ -133,11 +124,11 @@ func handleConnection(conn net.Conn, ctx *AppContext) {
 		case "echo":
 			err = HandleEcho(redisCmd, conn)
 		case "info":
-			err = HandleInfo(redisCmd, conn, ctx)
+			err = HandleInfo(redisCmd, conn, metadata)
 		case "set":
-			err = HandleSet(redisCmd, conn, ctx)
+			err = HandleSet(redisCmd, conn, store)
 		case "get":
-			err = HandleGet(redisCmd, conn, ctx)
+			err = HandleGet(redisCmd, conn, store)
 		default:
 			Errorf("Invalid redis command: [%s]", redisCmd.Name)
 			return
@@ -151,5 +142,21 @@ func handleConnection(conn net.Conn, ctx *AppContext) {
 				Fatalf("Error writing to client: %s", e.Error())
 			}
 		}
+	}
+}
+
+func handlePingMaster(masterURL string) {
+	conn, err := net.Dial("tcp", masterURL)
+	if err != nil {
+		Fatalf("frror connecting to master: %s", err.Error())
+		os.Exit(1)
+	}
+
+	request := encodeArray([]string{"ping"})
+	Debugf("req: [%q]", request)
+
+	_, err = conn.Write([]byte(request))
+	if err != nil {
+		Fatalf("unable to write to master redis: %s", err.Error())
 	}
 }

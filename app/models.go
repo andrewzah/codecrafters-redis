@@ -5,18 +5,23 @@ import (
 	"time"
 )
 
-type AppContext struct {
-	StoreMutex    sync.RWMutex
-	Store         map[string]RedisValue
-	MetadataMutex sync.RWMutex
-	Metadata      AppMetadata
-}
+var (
+	okResponse             = []byte("+OK\r\n")
+	pongResponse           = []byte("+PONG\r\n")
+	nullBulkStringResponse = []byte("$-1\r\n")
+)
 
-type AppMetadata struct {
-	Role            string
-	ReplID          string
-	ReplOffset      uint
-	ConnectedSlaves uint
+const (
+	MasterRole Role = "master"
+	// for legacy compatibility purposes
+	NodeRole Role = "slave"
+)
+
+type Role string
+
+type Store struct {
+	Mutex sync.RWMutex
+	Data  map[string]RedisValue
 }
 
 type RedisValue struct {
@@ -26,40 +31,43 @@ type RedisValue struct {
 	Expiry int64
 }
 
-func (c *AppContext) InsertData(key, value string, expiryMillis int64) {
+type InstanceMetadata struct {
+	Role            Role
+	ReplID          string
+	ReplOffset      uint
+	ConnectedSlaves uint
+}
+
+func (s *Store) InsertData(key, value string, expiryMillis int64) {
 	timeMillis := time.Now().UnixMilli()
 
 	Debugf("acquiring lock")
-	c.StoreMutex.Lock()
-	defer c.StoreMutex.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
 	Debugf("actually inserting data")
 	if expiryMillis == -1 {
-		c.Store[key] = RedisValue{value, -1}
+		s.Data[key] = RedisValue{value, -1}
 	} else {
-		c.Store[key] = RedisValue{value, timeMillis + expiryMillis}
+		s.Data[key] = RedisValue{value, timeMillis + expiryMillis}
 	}
 }
 
-func (c *AppContext) GetData(key string) string {
+func (s *Store) GetData(key string) string {
 	timeMillis := time.Now().UnixMilli()
 
-	c.StoreMutex.RLock()
-	defer c.StoreMutex.RUnlock()
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
 
-	val, ok := c.Store[key]
+	val, ok := s.Data[key]
 	if !ok {
 		return ""
 	}
 
 	if val.Expiry != -1 && timeMillis > val.Expiry {
-		delete(c.Store, key)
+		delete(s.Data, key)
 		return ""
 	}
 
 	return val.Data
-}
-
-type InfoReplication struct {
-	role string
 }

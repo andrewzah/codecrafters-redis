@@ -18,13 +18,13 @@ func HandlePing(conn net.Conn) error {
 	return writeResponse(pongResponse, conn)
 }
 
-func HandleSet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
+func HandleSet(cmd RedisCmd, conn net.Conn, store *Store) error {
 	switch len(cmd.Args) {
 	case 1:
 		return errors.New("expected argument for SET command")
 	case 2:
 		Debugf("inserting data")
-		ctx.InsertData(cmd.Args[0], cmd.Args[1], -1)
+		store.InsertData(cmd.Args[0], cmd.Args[1], -1)
 	case 3:
 		return errors.New("expected argument for SET subcommand")
 	case 4:
@@ -32,7 +32,7 @@ func HandleSet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
 		if err != nil {
 			return errors.New("unable to parse expiry argument into milliseconds (int64)")
 		}
-		ctx.InsertData(cmd.Args[0], cmd.Args[1], expiryMillis)
+		store.InsertData(cmd.Args[0], cmd.Args[1], expiryMillis)
 	default:
 		return errors.New("unexpected number of arguments for SET")
 	}
@@ -40,8 +40,8 @@ func HandleSet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
 	return writeResponse(okResponse, conn)
 }
 
-func HandleGet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
-	val := ctx.GetData(cmd.Args[0])
+func HandleGet(cmd RedisCmd, conn net.Conn, store *Store) error {
+	val := store.GetData(cmd.Args[0])
 	if val != "" {
 		response := encodeBulkString(val)
 		return writeResponse([]byte(response), conn)
@@ -49,15 +49,15 @@ func HandleGet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
 	return writeResponse(nullBulkStringResponse, conn)
 }
 
-func HandleInfo(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
+func HandleInfo(cmd RedisCmd, conn net.Conn, md InstanceMetadata) error {
 	if len(cmd.Args) < 1 {
 		return errors.New("expected subcommand for INFO command")
 	}
 	switch cmd.Args[0] {
 	case "replication":
 		response := fmt.Sprintf("role:%s\nconnected_slaves:%d\nmaster_replid:%s\nmaster_repl_offset:%d",
-			ctx.Metadata.Role, ctx.Metadata.ConnectedSlaves,
-			ctx.Metadata.ReplID, ctx.Metadata.ReplOffset)
+			md.Role, md.ConnectedSlaves,
+			md.ReplID, md.ReplOffset)
 
 		encodedResponse := encodeBulkString(response)
 		return writeResponse([]byte(encodedResponse), conn)
