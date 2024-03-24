@@ -55,6 +55,32 @@ func parseArgs() (a ServerArgs, e error) {
 	return
 }
 
+func createContext(args ServerArgs) *AppContext {
+	replID := ""
+	role := "slave"
+
+	if len(args.master) == 0 {
+		role = "master"
+		replID = RandStringBytes(40)
+	}
+
+	metadata := AppMetadata{
+		role,
+		replID,
+		0,
+		0,
+	}
+
+	ctx := AppContext{
+		sync.RWMutex{},
+		map[string]RedisValue{},
+		sync.RWMutex{},
+		metadata,
+	}
+
+	return &ctx
+}
+
 func main() {
 	args, err := parseArgs()
 	if err != nil {
@@ -71,17 +97,7 @@ func main() {
 
 	Infof("Listening on %s", bind)
 
-	ctx := AppContext{
-		sync.RWMutex{},
-		map[string]RedisValue{},
-		sync.RWMutex{},
-		AppMetadata{},
-	}
-	if len(args.master) == 0 {
-		ctx.Metadata.Role = "master"
-	} else {
-		ctx.Metadata.Role = "slave"
-	}
+	ctx := createContext(args)
 
 	for {
 		conn, err := l.Accept()
@@ -90,7 +106,7 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn, &ctx)
+		go handleConnection(conn, ctx)
 	}
 }
 

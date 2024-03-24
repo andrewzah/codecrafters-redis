@@ -13,7 +13,10 @@ type AppContext struct {
 }
 
 type AppMetadata struct {
-	Role string
+	Role            string
+	ReplID          string
+	ReplOffset      uint
+	ConnectedSlaves uint
 }
 
 type RedisValue struct {

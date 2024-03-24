@@ -55,8 +55,9 @@ func HandleInfo(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
 	}
 	switch cmd.Args[0] {
 	case "replication":
-		response := fmt.Sprintf("role:%s\nconnected_slaves:0",
-			ctx.Metadata.Role)
+		response := fmt.Sprintf("role:%s\nconnected_slaves:%d\nmaster_replid:%s\nmaster_repl_offset:%d",
+			ctx.Metadata.Role, ctx.Metadata.ConnectedSlaves,
+			ctx.Metadata.ReplID, ctx.Metadata.ReplOffset)
 
 		encodedResponse := encodeBulkString(response)
 		return writeResponse([]byte(encodedResponse), conn)
