@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -17,30 +18,30 @@ func HandlePing(conn net.Conn) error {
 	return writeResponse(pongResponse, conn)
 }
 
-func HandleSet(cmd RedisCmd, conn net.Conn, store Store) error {
+func HandleSet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
 	switch len(cmd.Args) {
 	case 1:
-		return errors.New("Expected argument for SET command.")
+		return errors.New("expected argument for SET command")
 	case 2:
 		Debugf("inserting data")
-		store.InsertData(cmd.Args[0], cmd.Args[1], -1)
+		ctx.InsertData(cmd.Args[0], cmd.Args[1], -1)
 	case 3:
-		return errors.New("Expected argument for SET subcommand.")
+		return errors.New("expected argument for SET subcommand")
 	case 4:
 		expiryMillis, err := strconv.ParseInt(cmd.Args[3], 10, 64)
 		if err != nil {
-			return errors.New("Unable to parse expiry argument into milliseconds (int64).")
+			return errors.New("unable to parse expiry argument into milliseconds (int64)")
 		}
-		store.InsertData(cmd.Args[0], cmd.Args[1], expiryMillis)
+		ctx.InsertData(cmd.Args[0], cmd.Args[1], expiryMillis)
 	default:
-		return errors.New("Unexpected number of arguments for SET")
+		return errors.New("unexpected number of arguments for SET")
 	}
 
 	return writeResponse(okResponse, conn)
 }
 
-func HandleGet(cmd RedisCmd, conn net.Conn, store Store) error {
-	val := store.GetData(cmd.Args[0])
+func HandleGet(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
+	val := ctx.GetData(cmd.Args[0])
 	if val != "" {
 		response := encodeBulkString(val)
 		return writeResponse([]byte(response), conn)
@@ -48,27 +49,24 @@ func HandleGet(cmd RedisCmd, conn net.Conn, store Store) error {
 	return writeResponse(nullBulkStringResponse, conn)
 }
 
-func HandleInfo(cmd RedisCmd, conn net.Conn) error {
+func HandleInfo(cmd RedisCmd, conn net.Conn, ctx *AppContext) error {
 	if len(cmd.Args) < 1 {
-		return errors.New("Expected subcommand for INFO command")
+		return errors.New("expected subcommand for INFO command")
 	}
 	switch cmd.Args[0] {
 	case "replication":
-		response := encodeBulkString("role:master\nconnected_slaves:0")
-		return writeResponse([]byte(response), conn)
+		response := fmt.Sprintf("role:%s\nconnected_slaves:0",
+			ctx.Metadata.Role)
+
+		encodedResponse := encodeBulkString(response)
+		return writeResponse([]byte(encodedResponse), conn)
 
 	default:
-		return errors.New("Unsupported subcommand for INFO command")
+		return errors.New("unsupported subcommand for INFO command")
 	}
-
 }
 
 func writeResponse(response []byte, conn net.Conn) error {
 	_, err := conn.Write(response)
-
-	if err != nil {
-		return err
-	} else {
-		return nil
-	}
+	return err
 }

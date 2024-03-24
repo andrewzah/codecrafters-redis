@@ -5,9 +5,15 @@ import (
 	"time"
 )
 
-type Store struct {
-	Map      map[string]RedisValue
-	MapMutex sync.RWMutex
+type AppContext struct {
+	StoreMutex    sync.RWMutex
+	Store         map[string]RedisValue
+	MetadataMutex sync.RWMutex
+	Metadata      AppMetadata
+}
+
+type AppMetadata struct {
+	Role string
 }
 
 type RedisValue struct {
@@ -17,34 +23,34 @@ type RedisValue struct {
 	Expiry int64
 }
 
-func (s Store) InsertData(key, value string, expiryMillis int64) {
+func (c *AppContext) InsertData(key, value string, expiryMillis int64) {
 	timeMillis := time.Now().UnixMilli()
 
 	Debugf("acquiring lock")
-	s.MapMutex.Lock()
-	defer s.MapMutex.Unlock()
+	c.StoreMutex.Lock()
+	defer c.StoreMutex.Unlock()
 
 	Debugf("actually inserting data")
 	if expiryMillis == -1 {
-		s.Map[key] = RedisValue{value, -1}
+		c.Store[key] = RedisValue{value, -1}
 	} else {
-		s.Map[key] = RedisValue{value, timeMillis + expiryMillis}
+		c.Store[key] = RedisValue{value, timeMillis + expiryMillis}
 	}
 }
 
-func (s Store) GetData(key string) string {
+func (c *AppContext) GetData(key string) string {
 	timeMillis := time.Now().UnixMilli()
 
-	s.MapMutex.RLock()
-	defer s.MapMutex.RUnlock()
+	c.StoreMutex.RLock()
+	defer c.StoreMutex.RUnlock()
 
-	val, ok := s.Map[key]
+	val, ok := c.Store[key]
 	if !ok {
 		return ""
 	}
 
 	if val.Expiry != -1 && timeMillis > val.Expiry {
-		delete(s.Map, key)
+		delete(c.Store, key)
 		return ""
 	}
 
