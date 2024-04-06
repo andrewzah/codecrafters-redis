@@ -75,7 +75,13 @@ func HandlePing(conn net.Conn) error {
 
 func HandlePsync(conn net.Conn, metadata InstanceMetadata) error {
     response := fmt.Sprintf("FULLRESYNC %s 0", metadata.ReplID)
-	return writeResponse(encodeSimpleString(response), conn)
+
+    err :=  writeResponse(encodeSimpleString(response), conn)
+    if err != nil {
+        return err
+    }
+
+    return writeResponse(emptyRDBFileResponse(), conn)
 }
 
 func writeResponse(response []byte, conn net.Conn) error {
