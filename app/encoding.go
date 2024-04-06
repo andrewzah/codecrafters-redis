@@ -9,7 +9,7 @@ import (
 )
 
 func encodeSimpleString(input string) []byte {
-	return []byte(fmt.Sprintf("$%s\r\n", input))
+	return []byte(fmt.Sprintf("+%s\r\n", input))
 }
 
 func encodeErrorString(input string) []byte {
