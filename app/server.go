@@ -50,18 +50,20 @@ func parseArgs() (a ServerArgs, e error) {
 }
 
 func initMetadata(args ServerArgs) *InstanceMetadata {
+    replOffset := -1
 	replID := "?"
 	role := NodeRole
 
 	if len(args.masterURL) == 0 {
 		role = MasterRole
 		replID = RandStringBytes(40)
+        replOffset = 0
 	}
 
 	metadata := InstanceMetadata{
 		role,
 		replID,
-		-1,
+		replOffset,
 		0,
 	}
 
