@@ -7,6 +7,7 @@ import (
 
 var (
 	okResponse             = []byte("+OK\r\n")
+    okResponseStr          = "+OK\r\n"
 	pongResponse           = []byte("+PONG\r\n")
 	nullBulkStringResponse = []byte("$-1\r\n")
 )
@@ -35,7 +36,7 @@ type InstanceMetadata struct {
 	Role            Role
 	ReplID          string
 	ReplOffset      uint
-	ConnectedSlaves uint
+	ConnectedNodes uint
 }
 
 func (s *Store) InsertData(key, value string, expiryMillis int64) {

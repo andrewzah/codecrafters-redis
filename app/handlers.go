@@ -18,6 +18,10 @@ func HandlePing(conn net.Conn) error {
 	return writeResponse(pongResponse, conn)
 }
 
+func HandleReplconf(conn net.Conn) error {
+	return writeResponse(okResponse, conn)
+}
+
 func HandleSet(cmd RedisCmd, conn net.Conn, store *Store) error {
 	switch len(cmd.Args) {
 	case 1:
@@ -53,10 +57,11 @@ func HandleInfo(cmd RedisCmd, conn net.Conn, md InstanceMetadata) error {
 	if len(cmd.Args) < 1 {
 		return errors.New("expected subcommand for INFO command")
 	}
+    
 	switch cmd.Args[0] {
 	case "replication":
 		response := fmt.Sprintf("role:%s\nconnected_slaves:%d\nmaster_replid:%s\nmaster_repl_offset:%d",
-			md.Role, md.ConnectedSlaves,
+			md.Role, md.ConnectedNodes,
 			md.ReplID, md.ReplOffset)
 
 		encodedResponse := encodeBulkString(response)
