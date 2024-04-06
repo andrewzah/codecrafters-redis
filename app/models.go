@@ -35,7 +35,7 @@ type RedisValue struct {
 type InstanceMetadata struct {
 	Role            Role
 	ReplID          string
-	ReplOffset      uint
+	ReplOffset      int
 	ConnectedNodes uint
 }
 

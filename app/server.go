@@ -50,7 +50,7 @@ func parseArgs() (a ServerArgs, e error) {
 }
 
 func initMetadata(args ServerArgs) *InstanceMetadata {
-	replID := ""
+	replID := "?"
 	role := NodeRole
 
 	if len(args.masterURL) == 0 {
@@ -61,7 +61,7 @@ func initMetadata(args ServerArgs) *InstanceMetadata {
 	metadata := InstanceMetadata{
 		role,
 		replID,
-		0,
+		-1,
 		0,
 	}
 
@@ -87,7 +87,7 @@ func main() {
 	store := Store{sync.RWMutex{}, map[string]RedisValue{}}
 
 	if metadata.Role == NodeRole {
-		go handleHandshake(args)
+		go handleHandshake(args, metadata)
 	}
 
 	for {
@@ -127,6 +127,8 @@ func handleConnection(conn net.Conn, store *Store, metadata InstanceMetadata) {
 			err = HandleInfo(redisCmd, conn, metadata)
 		case "ping":
 			err = HandlePing(conn)
+		case "psync":
+			err = HandlePsync(conn, metadata)
 		case "set":
 			err = HandleSet(redisCmd, conn, store)
 		case "replconf":
@@ -147,7 +149,7 @@ func handleConnection(conn net.Conn, store *Store, metadata InstanceMetadata) {
 	}
 }
 
-func handleHandshake(args ServerArgs) {
+func handleHandshake(args ServerArgs, metadata *InstanceMetadata) {
 	conn, err := net.Dial("tcp", args.masterURL)
 	if err != nil {
 		Fatalf("error connecting to master: %s", err.Error())
@@ -226,6 +228,26 @@ func handleHandshake(args ServerArgs) {
 
 	if string(buf[:bytesRead]) != okResponseStr {
 		Fatalf("expected ok response, received %q", buf[:bytesRead])
+		os.Exit(1)
+	}
+
+    ////////////////////////
+    /// REQUEST 4: PSYNC ///
+    ////////////////////////
+
+    request = encodeArray([]string{"psync", metadata.ReplID, fmt.Sprint(metadata.ReplOffset)})
+
+	_, err = conn.Write([]byte(request))
+	if err != nil {
+		Fatalf("unable to write to master redis: %s", err.Error())
+		os.Exit(1)
+	}
+
+	buf = make([]byte, 512)
+	bytesRead, err = bufio.NewReader(conn).Read(buf)
+
+	if err != nil {
+		Fatalf("error receiving data from master")
 		os.Exit(1)
 	}
 }

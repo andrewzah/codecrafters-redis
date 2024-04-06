@@ -14,36 +14,6 @@ func HandleEcho(cmd RedisCmd, conn net.Conn) error {
 	return writeResponse([]byte(response), conn)
 }
 
-func HandlePing(conn net.Conn) error {
-	return writeResponse(pongResponse, conn)
-}
-
-func HandleReplconf(conn net.Conn) error {
-	return writeResponse(okResponse, conn)
-}
-
-func HandleSet(cmd RedisCmd, conn net.Conn, store *Store) error {
-	switch len(cmd.Args) {
-	case 1:
-		return errors.New("expected argument for SET command")
-	case 2:
-		Debugf("inserting data")
-		store.InsertData(cmd.Args[0], cmd.Args[1], -1)
-	case 3:
-		return errors.New("expected argument for SET subcommand")
-	case 4:
-		expiryMillis, err := strconv.ParseInt(cmd.Args[3], 10, 64)
-		if err != nil {
-			return errors.New("unable to parse expiry argument into milliseconds (int64)")
-		}
-		store.InsertData(cmd.Args[0], cmd.Args[1], expiryMillis)
-	default:
-		return errors.New("unexpected number of arguments for SET")
-	}
-
-	return writeResponse(okResponse, conn)
-}
-
 func HandleGet(cmd RedisCmd, conn net.Conn, store *Store) error {
 	val := store.GetData(cmd.Args[0])
 	if val != "" {
@@ -70,6 +40,42 @@ func HandleInfo(cmd RedisCmd, conn net.Conn, md InstanceMetadata) error {
 	default:
 		return errors.New("unsupported subcommand for INFO command")
 	}
+}
+
+
+func HandleSet(cmd RedisCmd, conn net.Conn, store *Store) error {
+	switch len(cmd.Args) {
+	case 1:
+		return errors.New("expected argument for SET command")
+	case 2:
+		Debugf("inserting data")
+		store.InsertData(cmd.Args[0], cmd.Args[1], -1)
+	case 3:
+		return errors.New("expected argument for SET subcommand")
+	case 4:
+		expiryMillis, err := strconv.ParseInt(cmd.Args[3], 10, 64)
+		if err != nil {
+			return errors.New("unable to parse expiry argument into milliseconds (int64)")
+		}
+		store.InsertData(cmd.Args[0], cmd.Args[1], expiryMillis)
+	default:
+		return errors.New("unexpected number of arguments for SET")
+	}
+
+	return writeResponse(okResponse, conn)
+}
+
+func HandleReplconf(conn net.Conn) error {
+	return writeResponse(okResponse, conn)
+}
+
+func HandlePing(conn net.Conn) error {
+	return writeResponse(pongResponse, conn)
+}
+
+func HandlePsync(conn net.Conn, metadata InstanceMetadata) error {
+    response := fmt.Sprintf("+FULLRESYNC %s 0", metadata.ReplID)
+	return writeResponse([]byte(response), conn)
 }
 
 func writeResponse(response []byte, conn net.Conn) error {
