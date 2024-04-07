@@ -3,22 +3,23 @@ package main
 import (
 	"sync"
 	"time"
+	"net"
 )
+
+type Role string
 
 var (
 	okResponse             = []byte("+OK\r\n")
-    okResponseStr          = "+OK\r\n"
 	pongResponse           = []byte("+PONG\r\n")
 	nullBulkStringResponse = []byte("$-1\r\n")
 )
 
 const (
 	MasterRole Role = "master"
-	// for legacy compatibility purposes
-	NodeRole Role = "slave"
-)
+	ReplicaRole Role = "slave" // compatability
 
-type Role string
+    okResponseStr string = "+OK\r\n"
+)
 
 type Store struct {
 	Mutex sync.RWMutex
@@ -30,13 +31,6 @@ type RedisValue struct {
 
 	// in milliseconds
 	Expiry int64
-}
-
-type InstanceMetadata struct {
-	Role            Role
-	ReplID          string
-	ReplOffset      int
-	ConnectedNodes uint
 }
 
 func (s *Store) InsertData(key, value string, expiryMillis int64) {
@@ -71,4 +65,45 @@ func (s *Store) GetData(key string) string {
 	}
 
 	return val.Data
+}
+
+type InstanceMetadata struct {
+	Role            Role
+	ReplID          string
+	ReplOffset      int
+
+	ConnectedReplicasMutex sync.RWMutex
+	ConnectedReplicas []chan<- string
+}
+
+func NewMetadata(args ServerArgs) *InstanceMetadata {
+	if len(args.masterURL) == 0 {
+		// master
+		return &InstanceMetadata {
+			MasterRole,
+			RandStringBytes(40),
+			0,
+			sync.RWMutex{},
+			[]chan<- string{},
+		}
+	} else {
+		// replica
+		return &InstanceMetadata {
+			ReplicaRole,
+			"?",
+			-1,
+			sync.RWMutex{},
+			[]chan<- string{},
+		}
+	}
+}
+
+type ReplicaChan struct {
+	Id string
+	Conn net.Conn
+}
+
+type ReplicaSet struct {
+	Mutex sync.RWMutex
+	Replicas []ReplicaChan
 }

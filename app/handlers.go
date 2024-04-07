@@ -23,15 +23,18 @@ func HandleGet(cmd RedisCmd, conn net.Conn, store *Store) error {
 	return writeResponse(nullBulkStringResponse, conn)
 }
 
-func HandleInfo(cmd RedisCmd, conn net.Conn, md InstanceMetadata) error {
+func HandleInfo(cmd RedisCmd, conn net.Conn, md *InstanceMetadata) error {
 	if len(cmd.Args) < 1 {
 		return errors.New("expected subcommand for INFO command")
 	}
+
+	md.ConnectedReplicasMutex.RLock()
+	defer md.ConnectedReplicasMutex.RUnlock()
     
 	switch cmd.Args[0] {
 	case "replication":
 		response := fmt.Sprintf("role:%s\nconnected_slaves:%d\nmaster_replid:%s\nmaster_repl_offset:%d",
-			md.Role, md.ConnectedNodes,
+			md.Role, len(md.ConnectedReplicas),
 			md.ReplID, md.ReplOffset)
 
 		encodedResponse := encodeBulkString(response)
@@ -73,8 +76,8 @@ func HandlePing(conn net.Conn) error {
 	return writeResponse(pongResponse, conn)
 }
 
-func HandlePsync(conn net.Conn, metadata InstanceMetadata) error {
-    response := fmt.Sprintf("FULLRESYNC %s 0", metadata.ReplID)
+func HandlePsync(conn net.Conn, md *InstanceMetadata) error {
+    response := fmt.Sprintf("FULLRESYNC %s 0", md.ReplID)
 
     err :=  writeResponse(encodeSimpleString(response), conn)
     if err != nil {

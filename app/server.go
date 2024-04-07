@@ -49,27 +49,6 @@ func parseArgs() (a ServerArgs, e error) {
 	return
 }
 
-func initMetadata(args ServerArgs) *InstanceMetadata {
-    replOffset := -1
-	replID := "?"
-	role := NodeRole
-
-	if len(args.masterURL) == 0 {
-		role = MasterRole
-		replID = RandStringBytes(40)
-        replOffset = 0
-	}
-
-	metadata := InstanceMetadata{
-		role,
-		replID,
-		replOffset,
-		0,
-	}
-
-	return &metadata
-}
-
 func main() {
 	args, err := parseArgs()
 	if err != nil {
@@ -85,10 +64,10 @@ func main() {
 	defer l.Close()
 	Infof("Listening on %s", bind)
 
-	metadata := initMetadata(args)
+	metadata := NewMetadata(args)
 	store := Store{sync.RWMutex{}, map[string]RedisValue{}}
 
-	if metadata.Role == NodeRole {
+	if metadata.Role == ReplicaRole {
 		go handleHandshake(args, metadata)
 	}
 
@@ -126,11 +105,11 @@ func handleConnection(conn net.Conn, store *Store, metadata InstanceMetadata) {
 		case "echo":
 			err = HandleEcho(redisCmd, conn)
 		case "info":
-			err = HandleInfo(redisCmd, conn, metadata)
+			err = HandleInfo(redisCmd, conn, &metadata)
 		case "ping":
 			err = HandlePing(conn)
 		case "psync":
-			err = HandlePsync(conn, metadata)
+			err = HandlePsync(conn, &metadata)
 		case "set":
 			err = HandleSet(redisCmd, conn, store)
 		case "replconf":
@@ -148,108 +127,5 @@ func handleConnection(conn net.Conn, store *Store, metadata InstanceMetadata) {
 				Fatalf("Error writing to client: %s", e.Error())
 			}
 		}
-	}
-}
-
-func handleHandshake(args ServerArgs, metadata *InstanceMetadata) {
-	conn, err := net.Dial("tcp", args.masterURL)
-	if err != nil {
-		Fatalf("error connecting to master: %s", err.Error())
-		os.Exit(1)
-	}
-
-    ///////////////////////
-    /// REQUEST 1: PING ///
-    ///////////////////////
-
-	request := encodeArray([]string{"ping"})
-
-	_, err = conn.Write([]byte(request))
-	if err != nil {
-		Fatalf("unable to write to master redis: %s", err.Error())
-		os.Exit(1)
-	}
-
-	buf := make([]byte, 512)
-	bytesRead, err := bufio.NewReader(conn).Read(buf)
-
-	if err != nil {
-		Fatalf("error receiving data from master")
-		os.Exit(1)
-	}
-
-	if string(buf[:bytesRead]) != "+PONG\r\n" {
-		Fatalf("expected +PONG\\r\\n, received %q", buf[:bytesRead])
-		os.Exit(1)
-	}
-
-    ////////////////////////////
-    /// REQUEST 2: REPLCONF ///
-    ///////////////////////////
-
-    request = encodeArray([]string{"replconf", "listening-port", fmt.Sprint(args.bindPort)})
-
-	_, err = conn.Write([]byte(request))
-	if err != nil {
-		Fatalf("unable to write to master redis: %s", err.Error())
-		os.Exit(1)
-	}
-
-	buf = make([]byte, 512)
-	bytesRead, err = bufio.NewReader(conn).Read(buf)
-
-	if err != nil {
-		Fatalf("error receiving data from master")
-		os.Exit(1)
-	}
-
-	if string(buf[:bytesRead]) != okResponseStr {
-		Fatalf("expected ok response, received %q", buf[:bytesRead])
-		os.Exit(1)
-	}
-
-    /////////////////////////////
-    /// REQUEST 3: REPLCONF 2 ///
-    ////////////////////////////
-
-    request = encodeArray([]string{"replconf", "capa", "psync2"})
-
-	_, err = conn.Write([]byte(request))
-	if err != nil {
-		Fatalf("unable to write to master redis: %s", err.Error())
-		os.Exit(1)
-	}
-
-	buf = make([]byte, 512)
-	bytesRead, err = bufio.NewReader(conn).Read(buf)
-
-	if err != nil {
-		Fatalf("error receiving data from master")
-		os.Exit(1)
-	}
-
-	if string(buf[:bytesRead]) != okResponseStr {
-		Fatalf("expected ok response, received %q", buf[:bytesRead])
-		os.Exit(1)
-	}
-
-    ////////////////////////
-    /// REQUEST 4: PSYNC ///
-    ////////////////////////
-
-    request = encodeArray([]string{"psync", metadata.ReplID, fmt.Sprint(metadata.ReplOffset)})
-
-	_, err = conn.Write([]byte(request))
-	if err != nil {
-		Fatalf("unable to write to master redis: %s", err.Error())
-		os.Exit(1)
-	}
-
-	buf = make([]byte, 512)
-	bytesRead, err = bufio.NewReader(conn).Read(buf)
-
-	if err != nil {
-		Fatalf("error receiving data from master")
-		os.Exit(1)
 	}
 }
